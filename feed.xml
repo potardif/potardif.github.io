@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.8.3">Jekyll</generator><link href="https://potardif.github.io/feed.xml" rel="self" type="application/atom+xml" /><link href="https://potardif.github.io/" rel="alternate" type="text/html" /><updated>2018-10-13T15:03:21-04:00</updated><id>https://potardif.github.io/</id><title type="html">potardif’s blog</title><entry><title type="html">How to write a Game Boy emulator - Part 4: The instructions of the bios</title><link href="https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html" rel="alternate" type="text/html" title="How to write a Game Boy emulator - Part 4: The instructions of the bios" /><published>2017-07-01T00:00:00-04:00</published><updated>2017-07-01T00:00:00-04:00</updated><id>https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios</id><content type="html" xml:base="https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html">&lt;p&gt;This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details.&lt;/p&gt;
+
+&lt;p&gt;I recommend you only implement the instructions necessary to execute the bios. You run your emulator, you hit an unknown opcode, you implement it. You do this until the bios tries to write to memory location 0xFF50, which signals the end of it.&lt;/p&gt;
+
+&lt;p&gt;When you hit an unknown opcode, I suggest you look at &lt;a href=&quot;http://goldencrystal.free.fr/GBZ80Opcodes.pdf&quot;&gt;GBZ80Opcodes.pdf&lt;/a&gt; to find the corresponding instruction and then &lt;a href=&quot;http://zilog.com/docs/z80/um0080.pdf&quot;&gt;um0080.pdf&lt;/a&gt; to implement it.&lt;/p&gt;
+
+&lt;p&gt;Keep in mind that the latter documentation is for the Z80. While the Game Boy’s CPU is very similar, it is not the same. Taken from the &lt;a href=&quot;http://bgb.bircd.org/pandocs.htm&quot;&gt;pandocs&lt;/a&gt;, here are the opcodes that differ between the two:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Moved, Removed, and Added Opcodes
+  Opcode  Z80             GMB
+  ---------------------------------------
+  08      EX   AF,AF      LD   (nn),SP
+  10      DJNZ PC+dd      STOP
+  22      LD   (nn),HL    LDI  (HL),A
+  2A      LD   HL,(nn)    LDI  A,(HL)
+  32      LD   (nn),A     LDD  (HL),A
+  3A      LD   A,(nn)     LDD  A,(HL)
+  D3      OUT  (n),A      -
+  D9      EXX             RETI
+  DB      IN   A,(n)      -
+  DD      &amp;lt;IX&amp;gt;            -
+  E0      RET  PO         LD   (FF00+n),A
+  E2      JP   PO,nn      LD   (FF00+C),A
+  E3      EX   (SP),HL    -
+  E4      CALL P0,nn      -
+  E8      RET  PE         ADD  SP,dd
+  EA      JP   PE,nn      LD   (nn),A
+  EB      EX   DE,HL      -
+  EC      CALL PE,nn      -
+  ED      &amp;lt;pref&amp;gt;          -
+  F0      RET  P          LD   A,(FF00+n)
+  F2      JP   P,nn       LD   A,(FF00+C)
+  F4      CALL P,nn       -
+  F8      RET  M          LD   HL,SP+dd
+  FA      JP   M,nn       LD   A,(nn)
+  FC      CALL M,nn       -
+  FD      &amp;lt;IY&amp;gt;            -
+  CB3X    SLL  r/(HL)     SWAP r/(HL)
+Note: The unused (-) opcodes will lock-up the gameboy CPU when used.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The only Game Boy specific instructions in the bios are LDI and LDD. They notably &lt;strong&gt;don’t&lt;/strong&gt; work the same as LDI and LDD in the Z80. Here’s how to implement them taken from the pandocs:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  ldi  (HL),A      22         8 ---- (HL)=A, HL=HL+1
+  ldi  A,(HL)      2A         8 ---- A=(HL), HL=HL+1
+  ldd  (HL),A      32         8 ---- (HL)=A, HL=HL-1
+  ldd  A,(HL)      3A         8 ---- A=(HL), HL=HL-1
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;They’re equivalent to a LD followed by an increment/decrement of HL. No flags are affected.&lt;/p&gt;
+
+&lt;p&gt;I recommend you take advantage of the patterns in the opcodes to implement similar instructions at the same time. Personally I use a Go script to generate the &lt;code class=&quot;highlighter-rouge&quot;&gt;case&lt;/code&gt; statements in my opcode-decoding &lt;code class=&quot;highlighter-rouge&quot;&gt;switch&lt;/code&gt;. It’s easier and less error prone than copy-pasting the same code around and slightly modifying it.&lt;/p&gt;
+
+&lt;h2 id=&quot;some-notation&quot;&gt;Some notation&lt;/h2&gt;
+
+&lt;p&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;LD HL,0x0000&lt;/code&gt; means &lt;em&gt;load the value 0x0000 into HL&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;On the other hand, &lt;code class=&quot;highlighter-rouge&quot;&gt;LD (HL),0x00&lt;/code&gt; means &lt;em&gt;load the value 0x00 into memory location HL&lt;/em&gt;. The parentheses are important: they denote a memory location.&lt;/p&gt;
+
+&lt;h2 id=&quot;integer-overflow&quot;&gt;Integer overflow&lt;/h2&gt;
+
+&lt;p&gt;Let’s say A is equal to 0xFF. What happens if I increment its value? A is an unsigned 8-bit register, meaning that the maximum value it can hold is 0xFF, so what happens when you add 1 to it? Well, the value wraps around to 0x00.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Integer_overflow&quot;&gt;Integer overflow&lt;/a&gt; is usually a bad thing. It’s rare that you want your values to silently overflow in a normal program, but it is indeed what you want in your emulator. Everything should just overflow.&lt;/p&gt;
+
+&lt;h2 id=&quot;carries-and-borrows&quot;&gt;Carries and borrows&lt;/h2&gt;
+
+&lt;p&gt;While reading about CPU operations, you’ll encounter the concepts of carries, half-carries, borrows, and half-borrows. Here is how you can compute these values:&lt;/p&gt;
+
+&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;carry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFF&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;half_carry&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;borrow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;half_borrow&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;y&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;x&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;y&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x0F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h2 id=&quot;my-emulator-is-stuck-in-an-infinite-loop&quot;&gt;My emulator is stuck in an infinite loop!&lt;/h2&gt;
+
+&lt;p&gt;There are 3 places where the bios can get stuck in an infinite loop:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;strong&gt;While reading memory location 0xFF44.&lt;/strong&gt; 0xFF44 is the LCDC Y-Coordinate, or LY. It cycles through the values 0 to 153 on a normal Game Boy. At one point, the bios will wait for that value to be exactly 144 before continuing. The easy fix is to always return 144. That’s not what happens on a real Game Boy, but it’s good enough for the moment.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;While reading memory locations 0x0104-0x0133.&lt;/strong&gt; This address range is mapped to the cartridge. If there is no cartridge, these locations will return 0xFF. The problem is that the bios expects these locations to be strictly equal to the values at 0x00A8-0x00D7. So we’re going to cheat and return the latter values when the former values are asked.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;While reading memory locations 0x0134-0x014D.&lt;/strong&gt; This address range is mapped to the cartridge. The bios expects that the sum of these values plus 0x19 equals 0x00. If it doesn’t, the bios enters an infinite loop. I return 0xFF for these addresses except for 0x014D where I return 0x00. This takes care of the problem.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h2 id=&quot;my-emulator-is-slow&quot;&gt;My emulator is slow!&lt;/h2&gt;
+
+&lt;p&gt;The bios takes about 5 seconds to execute on a real Game Boy. If your emulator takes more time than that, the first step is to disable all logging. Don’t just turn off the printing, the problem is not necessarily I/O: string formatting in general can be really slow.&lt;/p&gt;
+
+&lt;p&gt;With logging turned on, gammaboy takes about 350ms to execute. With logging turned off, it takes about 3ms: that’s a hundredfold improvement!&lt;/p&gt;
+
+&lt;div class=&quot;language-terminal highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; ./gammaboy roms/DMG_ROM.gb &lt;span class=&quot;nt&quot;&gt;--log&lt;/span&gt;
+&lt;span class=&quot;go&quot;&gt;[...]
+Unimplemented memory write at 0xFF50.
+
+real	0m0.354s
+user	0m0.033s
+sys	0m0.122s
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; ./gammaboy roms/DMG_ROM.gb &lt;span class=&quot;nt&quot;&gt;--log&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; /dev/null
+&lt;span class=&quot;go&quot;&gt;Unimplemented memory write at 0xFF50.
+
+real	0m0.030s
+user	0m0.028s
+sys	0m0.001s
+&lt;/span&gt;&lt;span class=&quot;gp&quot;&gt;$&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;time&lt;/span&gt; ./gammaboy roms/DMG_ROM.gb
+&lt;span class=&quot;go&quot;&gt;Unimplemented memory write at 0xFF50.
+
+real	0m0.003s
+user	0m0.002s
+sys	0m0.001s
+&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;If your emulator is still slow after turning logging off, you’ll have to make it faster because it can only get slower. Modern hardware should run circles around the Game Boy.&lt;/p&gt;
+
+&lt;h2 id=&quot;the-code&quot;&gt;The code&lt;/h2&gt;
+
+&lt;p&gt;You can compare your emulator’s output to &lt;a href=&quot;/assets/part_4_output.txt&quot;&gt;mine&lt;/a&gt;. If your output differs, it doesn’t mean you’ve made a mistake. I have taken some shortcuts which I described earlier in this post. The biggest indicator that your emulator works is that it tries to write to memory location 0xFF50.&lt;/p&gt;
+
+&lt;p&gt;Here is a very useful disassembly of the bios: &lt;a href=&quot;https://gist.github.com/drhelius/6063288&quot;&gt;https://gist.github.com/drhelius/6063288&lt;/a&gt;.&lt;/p&gt;</content><author><name></name></author><summary type="html">This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details.</summary></entry><entry><title type="html">How to write a Game Boy emulator - Part 3: Fetch, decode, execute</title><link href="https://potardif.github.io/2017/05/27/how-to-write-a-game-boy-emulator-part-3-fetch-decode-execute.html" rel="alternate" type="text/html" title="How to write a Game Boy emulator - Part 3: Fetch, decode, execute" /><published>2017-05-27T00:00:00-04:00</published><updated>2017-05-27T00:00:00-04:00</updated><id>https://potardif.github.io/2017/05/27/how-to-write-a-game-boy-emulator-part-3-fetch-decode-execute</id><content type="html" xml:base="https://potardif.github.io/2017/05/27/how-to-write-a-game-boy-emulator-part-3-fetch-decode-execute.html">&lt;p&gt;The &lt;a href=&quot;https://en.wikipedia.org/wiki/Instruction_cycle&quot;&gt;fetch-decode-execute cycle&lt;/a&gt; is how every computer works:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;First &lt;strong&gt;fetch&lt;/strong&gt; the bytes from memory that form the current instruction.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Decode&lt;/strong&gt; the fetched bytes into a concrete instruction.&lt;/li&gt;
+  &lt;li&gt;&lt;strong&gt;Execute&lt;/strong&gt; the decoded instruction.&lt;/li&gt;
+  &lt;li&gt;Repeat the steps above for the next instruction.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The Program Counter holds the address of the current instruction in memory. Its value at startup in the Game Boy is 0x0000.&lt;/p&gt;
+
+&lt;p&gt;The Game Boy has a 16-bit address space, meaning that the lowest possible address is 0x0000, and the highest is 0xFFFF. Each address corresponds to a byte in memory. The bios is mapped to the first 256 bytes of the address space.&lt;/p&gt;
+
+&lt;p&gt;Let’s look at the first 7 bytes of the bios in a hexadecimal editor:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;31 FE FF AF 21 FF 9F
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Each CPU has its own &lt;a href=&quot;https://en.wikipedia.org/wiki/Instruction_set_architecture&quot;&gt;instruction set&lt;/a&gt;. This means that the available instructions differ from one CPU to the next, and how they are encoded differs too.&lt;/p&gt;
+
+&lt;p&gt;The processor in the Game Boy is the Sharp LR35902, which is a rough superset of the Intel 8080, and a rough subset of the Z80. Unfortunately I don’t think it has any official, publically available documentation, so I use &lt;a href=&quot;http://goldencrystal.free.fr/GBZ80Opcodes.pdf&quot;&gt;GBZ80Opcodes.pdf&lt;/a&gt; to decode bytes into instructions. Let’s look for the entry corresponding to 0x31:&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/0x31.png&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We can see that 0x31=0b00110001 corresponds to LD R,N where R=0b11=SP, and where N is the 16-bit &lt;a href=&quot;https://en.wikichip.org/wiki/immediate_value&quot;&gt;immediate&lt;/a&gt;. It’s a 3-bytes long instruction. The first byte is the opcode. The second and third bytes are the 16-bit immediate. Instructions on the Game Boy can be 1, 2, or 3-bytes long.&lt;/p&gt;
+
+&lt;p&gt;The Game Boy is &lt;a href=&quot;https://en.wikipedia.org/wiki/Endianness&quot;&gt;little-endian&lt;/a&gt;. This means that the immediate value here is equal to 0xFFFE (and &lt;em&gt;not&lt;/em&gt; 0xFEFF), which gives us the instruction LD SP,0xFFFE.&lt;/p&gt;
+
+&lt;p&gt;An instruction is composed of an operation and of operands. You can think of the operation as a function, and of the operands as the arguments to that function. In our case, LD is the operation, and SP and N are the operands. On the Game Boy, operations can have 0, 1, or 2 operands.&lt;/p&gt;
+
+&lt;p&gt;LD is the load instruction. You can think of it as the assignment instruction. It takes the value of the second argument, and puts it in the first argument. This means that the instruction LD SP,0xFFFE assigns the value 0xFFFE to SP.&lt;/p&gt;
+
+&lt;p&gt;The next byte in the bios is 0xAF and it corresponds to the instruction XOR A. XOR is the “exclusive or” operation.&lt;/p&gt;
+
+&lt;p&gt;We’re gonna need to look at another document, &lt;a href=&quot;http://zilog.com/docs/z80/um0080.pdf&quot;&gt;UM0080.pdf&lt;/a&gt; to know what XOR does exactly. It’s the official documentation for the Z80, so it’s very accurate and well done, but keep in mind that the CPU in the Game Boy is &lt;em&gt;not&lt;/em&gt; a Z80, so you can’t take it literally. As of this writing, the last update to that document was in August 2016, which I think is awesome: I mean, I can’t imagine that a processor from the 70s is widely used anymore, but they still update its documentation for typos and errors. For now, you only need to know that XOR has the same behavior in the Z80 and in the Game Boy.&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/XOR.png&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This gives something like this once translated into code:&lt;/p&gt;
+
+&lt;div class=&quot;language-c++ highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// UM0080.pdf rev 11 p175 / 332&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;template&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;typename&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;XOR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;T&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;u8&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;x&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;get&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+	&lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Z&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;set&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;result&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x00&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;N&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;H&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;C&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reset&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gb&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The next byte in the bios is 0x21 which corresponds to LD HL,N where N is the 16-bit immediate value.&lt;/p&gt;
+
+&lt;p&gt;And that’s it for this post. We’re only emulating the first 7 bytes of the bios, but it still requires a fair amount of code.&lt;/p&gt;
+
+&lt;h2 id=&quot;the-code&quot;&gt;The code&lt;/h2&gt;
+
+&lt;p&gt;There are many ways you can structure your code. You can look at mine for inspiration. What is certain though is that your emulator should have some sort of logging capability. You need to know what’s going on inside your emulator, otherwise it’s going to be undebuggable. It should output something like this:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;PC=0x0000 AF=0x0000 BC=0x0000 DE=0x0000 HL=0x0000 SP=0x0000
+LD SP, imm_u16
+PC=0x0003 AF=0x0000 BC=0x0000 DE=0x0000 HL=0x0000 SP=0xFFFE
+XOR A
+PC=0x0004 AF=0x0080 BC=0x0000 DE=0x0000 HL=0x0000 SP=0xFFFE
+LD HL, imm_u16
+PC=0x0007 AF=0x0080 BC=0x0000 DE=0x0000 HL=0x9FFF SP=0xFFFE
+Unknown opcode 0x32=0b00110010 at 0x0007.
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;</content><author><name></name></author><summary type="html">The fetch-decode-execute cycle is how every computer works:</summary></entry><entry><title type="html">How to write a Game Boy emulator - Part 2: Registers and flags</title><link href="https://potardif.github.io/2017/02/19/how-to-write-a-game-boy-emulator-part-2-registers-and-flags.html" rel="alternate" type="text/html" title="How to write a Game Boy emulator - Part 2: Registers and flags" /><published>2017-02-19T00:00:00-05:00</published><updated>2017-02-19T00:00:00-05:00</updated><id>https://potardif.github.io/2017/02/19/how-to-write-a-game-boy-emulator-part-2-registers-and-flags</id><content type="html" xml:base="https://potardif.github.io/2017/02/19/how-to-write-a-game-boy-emulator-part-2-registers-and-flags.html">&lt;h2 id=&quot;prerequesites&quot;&gt;Prerequesites&lt;/h2&gt;
+
+&lt;p&gt;Writing an emulator requires some knowledge of low-level programming. You should familiarize yourself with the following concepts because they’re going to be recurrent throughout this tutorial:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Binary_number&quot;&gt;Binary notation&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Hexadecimal&quot;&gt;Hexadecimal notation&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://en.wikipedia.org/wiki/Bitwise_operation&quot;&gt;Bitwise operators&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://stackoverflow.com/questions/10493411/what-is-bit-masking&quot;&gt;Bit masks&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c&quot;&gt;Bit twiddling&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;registers&quot;&gt;Registers&lt;/h2&gt;
+
+&lt;p&gt;Registers are like super-fast memory, but available in very limited quantities. There are so few of them that we refer to each one by name. The Game Boy has six 16-bit registers, and eight 8-bit registers.&lt;/p&gt;
+
+&lt;table&gt;
+	&lt;tr&gt;
+		&lt;th&gt;16-bit registers&lt;/th&gt;
+		&lt;th&gt;8-bit registers&lt;/th&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;td&gt;
+			&lt;ul&gt;
+				&lt;li&gt;AF&lt;/li&gt;
+				&lt;li&gt;BC&lt;/li&gt;
+				&lt;li&gt;DE&lt;/li&gt;
+				&lt;li&gt;HL&lt;/li&gt;
+				&lt;li&gt;PC (the Program Counter)&lt;/li&gt;
+				&lt;li&gt;SP (the Stack Pointer)&lt;/li&gt;
+			&lt;/ul&gt;
+		&lt;/td&gt;
+		&lt;td&gt;
+			&lt;ul&gt;
+				&lt;li&gt;A (the Accumulator)&lt;/li&gt;
+				&lt;li&gt;F (the Flag register)&lt;/li&gt;
+				&lt;li&gt;B&lt;/li&gt;
+				&lt;li&gt;C&lt;/li&gt;
+				&lt;li&gt;D&lt;/li&gt;
+				&lt;li&gt;E&lt;/li&gt;
+				&lt;li&gt;H&lt;/li&gt;
+				&lt;li&gt;L&lt;/li&gt;
+			&lt;/ul&gt;
+		&lt;/td&gt;
+	&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;A 16-bit register can store a number from 0 to 65 535 inclusively, while an 8-bit register can store a number from 0 to 255.&lt;/p&gt;
+
+&lt;table&gt;
+	&lt;tr&gt;
+		&lt;th&gt;&lt;/th&gt;
+		&lt;th&gt;Minimum value&lt;/th&gt;
+		&lt;th&gt;Maximum value&lt;/th&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th&gt;16-bit register&lt;/th&gt;
+		&lt;td&gt;0&lt;/td&gt;
+		&lt;td&gt;2&lt;sup&gt;16&lt;/sup&gt; - 1 = 65&amp;nbsp;535 = 0xFFFF&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th&gt;8-bit register&lt;/th&gt;
+		&lt;td&gt;0&lt;/td&gt;
+		&lt;td&gt;2&lt;sup&gt;8&lt;/sup&gt; - 1 = 255 = 0xFF&lt;/td&gt;
+	&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;There is one important thing to understand however. The 16-bit and 8-bit registers are not disjoint. Each 8-bit register is just one half of a 16-bit register.&lt;/p&gt;
+
+&lt;p&gt;What does this mean? Let’s take BC as an example. BC is a 16-bit register, but it’s &lt;em&gt;also&lt;/em&gt; two 8-bit registers: B and C namely. If BC = 0x1234, that means that B = 0x12 and C = 0x34. If you change the value of B to 0x22, that means that BC now equals 0x2234.&lt;/p&gt;
+
+&lt;table&gt;
+	&lt;tr&gt;&lt;th&gt;Most Significant Byte (MSB)&lt;/th&gt;&lt;th&gt;Least Significant Byte (LSB)&lt;/th&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td style=&quot;text-align: right;&quot;&gt;A&lt;/td&gt;&lt;td style=&quot;text-align: left;&quot;&gt;F&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td style=&quot;text-align: right;&quot;&gt;B&lt;/td&gt;&lt;td style=&quot;text-align: left;&quot;&gt;C&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td style=&quot;text-align: right;&quot;&gt;D&lt;/td&gt;&lt;td style=&quot;text-align: left;&quot;&gt;E&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td style=&quot;text-align: right;&quot;&gt;H&lt;/td&gt;&lt;td style=&quot;text-align: left;&quot;&gt;L&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td colspan=&quot;2&quot; style=&quot;text-align: center;&quot;&gt;PC&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td colspan=&quot;2&quot; style=&quot;text-align: center;&quot;&gt;SP&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The following invariants are always true:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;AF == (A &amp;lt;&amp;lt; 8) | F&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;A == AF &amp;gt;&amp;gt; 8&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;F == AF &amp;amp; 0x00FF&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;BC == (B &amp;lt;&amp;lt; 8) | C&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;B == BC &amp;gt;&amp;gt; 8&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;C == BC &amp;amp; 0x00FF&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;DE == (D &amp;lt;&amp;lt; 8) | E&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;D == DE &amp;gt;&amp;gt; 8&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;E == DE &amp;amp; 0x00FF&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;HL == (H &amp;lt;&amp;lt; 8) | L&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;H == HL &amp;gt;&amp;gt; 8&lt;/code&gt; &lt;code class=&quot;highlighter-rouge&quot;&gt;L == HL &amp;amp; 0x00FF&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h2 id=&quot;flags&quot;&gt;Flags&lt;/h2&gt;
+
+&lt;p&gt;A flag is a boolean value represented as a bit. It has only two possible states: 0 and 1.&lt;/p&gt;
+
+&lt;table&gt;
+	&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;th&gt;1&lt;/th&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;false&lt;/td&gt;&lt;td&gt;true&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;off&lt;/td&gt;&lt;td&gt;on&lt;/td&gt;&lt;/tr&gt;
+	&lt;tr&gt;&lt;td&gt;reset&lt;/td&gt;&lt;td&gt;set&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;The Game Boy has four flags:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Z (the Zero flag)&lt;/li&gt;
+  &lt;li&gt;N (the Negative flag)&lt;/li&gt;
+  &lt;li&gt;H (the Half-carry flag)&lt;/li&gt;
+  &lt;li&gt;C (the Carry flag)&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Each flag is represented as one bit inside the Flag register. Bit 7 is the most significant bit (msb) while bit 0 is the least significant bit (lsb).&lt;/p&gt;
+
+&lt;table style=&quot;text-align: center;&quot;&gt;
+	&lt;tr&gt;
+		&lt;th&gt;Bit 7&lt;/th&gt;
+		&lt;th&gt;Bit 6&lt;/th&gt;
+		&lt;th&gt;Bit 5&lt;/th&gt;
+		&lt;th&gt;Bit 4&lt;/th&gt;
+		&lt;th&gt;Bit 3&lt;/th&gt;
+		&lt;th&gt;Bit 2&lt;/th&gt;
+		&lt;th&gt;Bit 1&lt;/th&gt;
+		&lt;th&gt;Bit 0&lt;/th&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;td colspan=&quot;8&quot;&gt;F (the Flag register)&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;td&gt;Z&lt;/td&gt;
+		&lt;td&gt;N&lt;/td&gt;
+		&lt;td&gt;H&lt;/td&gt;
+		&lt;td&gt;C&lt;/td&gt;
+		&lt;td&gt;0&lt;/td&gt;
+		&lt;td&gt;0&lt;/td&gt;
+		&lt;td&gt;0&lt;/td&gt;
+		&lt;td&gt;0&lt;/td&gt;
+	&lt;/tr&gt;
+&lt;/table&gt;
+
+&lt;p&gt;That means that if you change the value of a flag, you change the value of F. And if you change the value of F, you change the value of the flags.&lt;/p&gt;
+
+&lt;p&gt;Do note that bits 0,1,2,3 of F are always 0.&lt;/p&gt;
+
+&lt;h2 id=&quot;the-code&quot;&gt;The code&lt;/h2&gt;
+
+&lt;p&gt;Your registers and your flags should support two operations: get and set. There are many ways to achieve that, but in the end they should maintain the invariants discussed above.&lt;/p&gt;</content><author><name></name></author><summary type="html">Prerequesites</summary></entry><entry><title type="html">How to write a Game Boy emulator - Part 1: Loading the bios</title><link href="https://potardif.github.io/2017/02/04/how-to-write-a-game-boy-emulator-part-1-loading-the-bios.html" rel="alternate" type="text/html" title="How to write a Game Boy emulator - Part 1: Loading the bios" /><published>2017-02-04T00:00:00-05:00</published><updated>2017-02-04T00:00:00-05:00</updated><id>https://potardif.github.io/2017/02/04/how-to-write-a-game-boy-emulator-part-1-loading-the-bios</id><content type="html" xml:base="https://potardif.github.io/2017/02/04/how-to-write-a-game-boy-emulator-part-1-loading-the-bios.html">&lt;p&gt;Writing an emulator may sound impossible to many people, but I can assure you it’s very possible but also very fun and rewarding. The difficult part is not writing the emulator, it’s understanding how the emulated machine works. As always, code is cheap; documentation is priceless.&lt;/p&gt;
+
+&lt;p&gt;I could not have written my Game Boy emulator if people before me had not documented how the Game Boy works:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;http://bgb.bircd.org/pandocs.htm&quot;&gt;http://bgb.bircd.org/pandocs.htm&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://gbdev.gg8.se/wiki/articles/Main_Page&quot;&gt;http://gbdev.gg8.se/wiki/articles/Main_Page&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://goldencrystal.free.fr/GBZ80Opcodes.pdf&quot;&gt;http://goldencrystal.free.fr/GBZ80Opcodes.pdf&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://imrannazar.com/GameBoy-Emulation-in-JavaScript&quot;&gt;http://imrannazar.com/GameBoy-Emulation-in-JavaScript&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://marc.rawer.de/Gameboy/Docs/GBCPUman.pdf&quot;&gt;http://marc.rawer.de/Gameboy/Docs/GBCPUman.pdf&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://zilog.com/docs/z80/um0080.pdf&quot;&gt;http://zilog.com/docs/z80/um0080.pdf&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://www.codeslinger.co.uk/pages/projects/gameboy.html&quot;&gt;http://www.codeslinger.co.uk/pages/projects/gameboy.html&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html&quot;&gt;http://www.pastraiser.com/cpu/gameboy/gameboy_opcodes.html&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf&quot;&gt;https://github.com/AntonioND/giibiiadvance/blob/master/docs/TCAGBD.pdf&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://realboyemulator.wordpress.com/&quot;&gt;https://realboyemulator.wordpress.com/&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.reddit.com/r/EmuDev/&quot;&gt;https://www.reddit.com/r/EmuDev/&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;I hope to return the favor by writing this blog series. My goal is to document step-by-step how to write a Game Boy emulator, and hopefully make emulator development more accessible. Each post in this blog series will describe a commit in the &lt;a href=&quot;https://github.com/potardif/gammaboy&quot;&gt;gammaboy repository&lt;/a&gt;.&lt;/p&gt;
+
+&lt;hr style=&quot;margin-bottom: 15px;&quot; /&gt;
+
+&lt;p&gt;Many consoles have been released in the Game Boy line throughout the years:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Game Boy family
+    &lt;ul&gt;
+      &lt;li&gt;Game Boy (DMG) (1989)&lt;/li&gt;
+      &lt;li&gt;Game Boy Pocket (1996)&lt;/li&gt;
+      &lt;li&gt;Game Boy Light (1998)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+  &lt;li&gt;Game Boy Color (1998)&lt;/li&gt;
+  &lt;li&gt;Game Boy Advance family
+    &lt;ul&gt;
+      &lt;li&gt;Game Boy Advance (2001)&lt;/li&gt;
+      &lt;li&gt;Game Boy Advance SP (2003)&lt;/li&gt;
+      &lt;li&gt;Game Boy Micro (2005)&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Our emulator will only support the original 1989 Game Boy. This model is called the Dot Matrix Game Boy or DMG. From this point on, when I say “Game Boy”, what I really mean is the DMG.&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;
+	&lt;a href=&quot;https://commons.wikimedia.org/wiki/File:Game-Boy-FL.png&quot;&gt;&lt;img src=&quot;/assets/198px-Game-Boy-FL.png&quot; /&gt;&lt;/a&gt;
+&lt;/p&gt;
+
+&lt;p&gt;The bios, also called the bootstrap rom or boot rom, is a program stored in the Game Boy that is executed on startup before any game code.&lt;/p&gt;
+
+&lt;p&gt;The bios behaves differently whether you start the Game Boy with a cartridge or not. If no cartridge is inserted, it scrolls a black bar&lt;sup&gt;®&lt;/sup&gt; and plays a sound:&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;
+	&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/x4iXjJB2Jpk&quot; frameborder=&quot;0&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+&lt;/p&gt;
+
+&lt;p&gt;If a cartridge is inserted, it scrolls the Nintendo logo and plays a sound:&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;
+	&lt;iframe width=&quot;560&quot; height=&quot;315&quot; src=&quot;https://www.youtube.com/embed/-Fh9SpWFdn0?start=2&amp;amp;end=14&quot; frameborder=&quot;0&quot; allowfullscreen=&quot;&quot;&gt;&lt;/iframe&gt;
+&lt;/p&gt;
+
+&lt;p&gt;Behind the scenes, it does various checks to determine the legitimacy of the cartridge.&lt;/p&gt;
+
+&lt;p&gt;The DMG bios is a 256-byte file with this SHA-256 hash:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;cf053eccb4ccafff9e67339d4e78e98dce7d1ed59be819d2a1ba2232c6fce1c7
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;You don’t &lt;em&gt;need&lt;/em&gt; the bios to write a Game Boy emulator. Game Boy emulators out there don’t ask you for the bios because they just skip it. For pedagogical purposes though, I think it’s best to start by emulating the bios because it’s the fastest way to get things displayed on the screen.&lt;/p&gt;
+
+&lt;p&gt;Once you have the bios, your emulator needs to:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Read the bios file.&lt;/li&gt;
+  &lt;li&gt;Store it in a byte array.&lt;/li&gt;
+  &lt;li&gt;Verify its SHA-256 hash.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;When I say to store the bios in an array, I mean &lt;em&gt;at runtime&lt;/em&gt;. Whatever you do, don’t hardcode the bios in the source code of your emulator (for legal reasons).&lt;/p&gt;</content><author><name></name></author><summary type="html">Writing an emulator may sound impossible to many people, but I can assure you it’s very possible but also very fun and rewarding. The difficult part is not writing the emulator, it’s understanding how the emulated machine works. As always, code is cheap; documentation is priceless.</summary></entry></feed>

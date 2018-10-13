@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>How to write a Game Boy emulator - Part 4: The instructions of the bios | potardif’s blog</title>
+<meta name="generator" content="Jekyll v3.8.3" />
+<meta property="og:title" content="How to write a Game Boy emulator - Part 4: The instructions of the bios" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details." />
+<meta property="og:description" content="This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details." />
+<link rel="canonical" href="https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html" />
+<meta property="og:url" content="https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html" />
+<meta property="og:site_name" content="potardif’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2017-07-01T00:00:00-04:00" />
+<script type="application/ld+json">
+{"mainEntityOfPage":{"@type":"WebPage","@id":"https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html"},"@type":"BlogPosting","url":"https://potardif.github.io/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html","headline":"How to write a Game Boy emulator - Part 4: The instructions of the bios","dateModified":"2017-07-01T00:00:00-04:00","datePublished":"2017-07-01T00:00:00-04:00","description":"This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details.","@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://potardif.github.io/feed.xml" title="potardif's blog" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">potardif&#39;s blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">How to write a Game Boy emulator - Part 4: The instructions of the bios</h1>
+    <p class="post-meta">
+      Published on
+      <time class="dt-published" datetime="2017-07-01T00:00:00-04:00" itemprop="datePublished">2017-07-01</time>.
+      Last modified on
+        <time class="dt-modified" datetime="2018-10-13T00:00:00-04:00" itemprop="dateModified">
+          2018-10-13</time>.</p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>This is the part where all Game Boy emulator tutorials get handwavy. This one is no exception. We’re going to add CPU instructions to our emulator until it can go through the bios, but it would be way too long for me to explain each and every instruction, so you’ll have to refer to the code for the details.</p>
+
+<p>I recommend you only implement the instructions necessary to execute the bios. You run your emulator, you hit an unknown opcode, you implement it. You do this until the bios tries to write to memory location 0xFF50, which signals the end of it.</p>
+
+<p>When you hit an unknown opcode, I suggest you look at <a href="http://goldencrystal.free.fr/GBZ80Opcodes.pdf">GBZ80Opcodes.pdf</a> to find the corresponding instruction and then <a href="http://zilog.com/docs/z80/um0080.pdf">um0080.pdf</a> to implement it.</p>
+
+<p>Keep in mind that the latter documentation is for the Z80. While the Game Boy’s CPU is very similar, it is not the same. Taken from the <a href="http://bgb.bircd.org/pandocs.htm">pandocs</a>, here are the opcodes that differ between the two:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Moved, Removed, and Added Opcodes
+  Opcode  Z80             GMB
+  ---------------------------------------
+  08      EX   AF,AF      LD   (nn),SP
+  10      DJNZ PC+dd      STOP
+  22      LD   (nn),HL    LDI  (HL),A
+  2A      LD   HL,(nn)    LDI  A,(HL)
+  32      LD   (nn),A     LDD  (HL),A
+  3A      LD   A,(nn)     LDD  A,(HL)
+  D3      OUT  (n),A      -
+  D9      EXX             RETI
+  DB      IN   A,(n)      -
+  DD      &lt;IX&gt;            -
+  E0      RET  PO         LD   (FF00+n),A
+  E2      JP   PO,nn      LD   (FF00+C),A
+  E3      EX   (SP),HL    -
+  E4      CALL P0,nn      -
+  E8      RET  PE         ADD  SP,dd
+  EA      JP   PE,nn      LD   (nn),A
+  EB      EX   DE,HL      -
+  EC      CALL PE,nn      -
+  ED      &lt;pref&gt;          -
+  F0      RET  P          LD   A,(FF00+n)
+  F2      JP   P,nn       LD   A,(FF00+C)
+  F4      CALL P,nn       -
+  F8      RET  M          LD   HL,SP+dd
+  FA      JP   M,nn       LD   A,(nn)
+  FC      CALL M,nn       -
+  FD      &lt;IY&gt;            -
+  CB3X    SLL  r/(HL)     SWAP r/(HL)
+Note: The unused (-) opcodes will lock-up the gameboy CPU when used.
+</code></pre></div></div>
+
+<p>The only Game Boy specific instructions in the bios are LDI and LDD. They notably <strong>don’t</strong> work the same as LDI and LDD in the Z80. Here’s how to implement them taken from the pandocs:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  ldi  (HL),A      22         8 ---- (HL)=A, HL=HL+1
+  ldi  A,(HL)      2A         8 ---- A=(HL), HL=HL+1
+  ldd  (HL),A      32         8 ---- (HL)=A, HL=HL-1
+  ldd  A,(HL)      3A         8 ---- A=(HL), HL=HL-1
+</code></pre></div></div>
+
+<p>They’re equivalent to a LD followed by an increment/decrement of HL. No flags are affected.</p>
+
+<p>I recommend you take advantage of the patterns in the opcodes to implement similar instructions at the same time. Personally I use a Go script to generate the <code class="highlighter-rouge">case</code> statements in my opcode-decoding <code class="highlighter-rouge">switch</code>. It’s easier and less error prone than copy-pasting the same code around and slightly modifying it.</p>
+
+<h2 id="some-notation">Some notation</h2>
+
+<p><code class="highlighter-rouge">LD HL,0x0000</code> means <em>load the value 0x0000 into HL</em>.</p>
+
+<p>On the other hand, <code class="highlighter-rouge">LD (HL),0x00</code> means <em>load the value 0x00 into memory location HL</em>. The parentheses are important: they denote a memory location.</p>
+
+<h2 id="integer-overflow">Integer overflow</h2>
+
+<p>Let’s say A is equal to 0xFF. What happens if I increment its value? A is an unsigned 8-bit register, meaning that the maximum value it can hold is 0xFF, so what happens when you add 1 to it? Well, the value wraps around to 0x00.</p>
+
+<p><a href="https://en.wikipedia.org/wiki/Integer_overflow">Integer overflow</a> is usually a bad thing. It’s rare that you want your values to silently overflow in a normal program, but it is indeed what you want in your emulator. Everything should just overflow.</p>
+
+<h2 id="carries-and-borrows">Carries and borrows</h2>
+
+<p>While reading about CPU operations, you’ll encounter the concepts of carries, half-carries, borrows, and half-borrows. Here is how you can compute these values:</p>
+
+<div class="language-c++ highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">bool</span> <span class="nf">carry</span><span class="p">(</span><span class="n">u8</span> <span class="n">x</span><span class="p">,</span> <span class="n">u8</span> <span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span> <span class="o">&gt;</span> <span class="mh">0xFF</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">bool</span> <span class="nf">half_carry</span><span class="p">(</span><span class="n">u8</span> <span class="n">x</span><span class="p">,</span> <span class="n">u8</span> <span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&amp;</span> <span class="mh">0x0F</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="mh">0x0F</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mh">0x0F</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">bool</span> <span class="nf">borrow</span><span class="p">(</span><span class="n">u8</span> <span class="n">x</span><span class="p">,</span> <span class="n">u8</span> <span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="n">y</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">bool</span> <span class="nf">half_borrow</span><span class="p">(</span><span class="n">u8</span> <span class="n">x</span><span class="p">,</span> <span class="n">u8</span> <span class="n">y</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="p">(</span><span class="n">x</span> <span class="o">&amp;</span> <span class="mh">0x0F</span><span class="p">)</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">y</span> <span class="o">&amp;</span> <span class="mh">0x0F</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<h2 id="my-emulator-is-stuck-in-an-infinite-loop">My emulator is stuck in an infinite loop!</h2>
+
+<p>There are 3 places where the bios can get stuck in an infinite loop:</p>
+
+<ol>
+  <li><strong>While reading memory location 0xFF44.</strong> 0xFF44 is the LCDC Y-Coordinate, or LY. It cycles through the values 0 to 153 on a normal Game Boy. At one point, the bios will wait for that value to be exactly 144 before continuing. The easy fix is to always return 144. That’s not what happens on a real Game Boy, but it’s good enough for the moment.</li>
+  <li><strong>While reading memory locations 0x0104-0x0133.</strong> This address range is mapped to the cartridge. If there is no cartridge, these locations will return 0xFF. The problem is that the bios expects these locations to be strictly equal to the values at 0x00A8-0x00D7. So we’re going to cheat and return the latter values when the former values are asked.</li>
+  <li><strong>While reading memory locations 0x0134-0x014D.</strong> This address range is mapped to the cartridge. The bios expects that the sum of these values plus 0x19 equals 0x00. If it doesn’t, the bios enters an infinite loop. I return 0xFF for these addresses except for 0x014D where I return 0x00. This takes care of the problem.</li>
+</ol>
+
+<h2 id="my-emulator-is-slow">My emulator is slow!</h2>
+
+<p>The bios takes about 5 seconds to execute on a real Game Boy. If your emulator takes more time than that, the first step is to disable all logging. Don’t just turn off the printing, the problem is not necessarily I/O: string formatting in general can be really slow.</p>
+
+<p>With logging turned on, gammaboy takes about 350ms to execute. With logging turned off, it takes about 3ms: that’s a hundredfold improvement!</p>
+
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span> <span class="nb">time</span> ./gammaboy roms/DMG_ROM.gb <span class="nt">--log</span>
+<span class="go">[...]
+Unimplemented memory write at 0xFF50.
+
+real	0m0.354s
+user	0m0.033s
+sys	0m0.122s
+</span><span class="gp">$</span> <span class="nb">time</span> ./gammaboy roms/DMG_ROM.gb <span class="nt">--log</span> <span class="o">&gt;</span> /dev/null
+<span class="go">Unimplemented memory write at 0xFF50.
+
+real	0m0.030s
+user	0m0.028s
+sys	0m0.001s
+</span><span class="gp">$</span> <span class="nb">time</span> ./gammaboy roms/DMG_ROM.gb
+<span class="go">Unimplemented memory write at 0xFF50.
+
+real	0m0.003s
+user	0m0.002s
+sys	0m0.001s
+</span></code></pre></div></div>
+
+<p>If your emulator is still slow after turning logging off, you’ll have to make it faster because it can only get slower. Modern hardware should run circles around the Game Boy.</p>
+
+<h2 id="the-code">The code</h2>
+
+<p>You can compare your emulator’s output to <a href="/assets/part_4_output.txt">mine</a>. If your output differs, it doesn’t mean you’ve made a mistake. I have taken some shortcuts which I described earlier in this post. The biggest indicator that your emulator works is that it tries to write to memory location 0xFF50.</p>
+
+<p>Here is a very useful disassembly of the bios: <a href="https://gist.github.com/drhelius/6063288">https://gist.github.com/drhelius/6063288</a>.</p>
+
+
+<p style="text-align: center;"><a href="https://github.com/potardif/gammaboy/commit/c1799c7efc015daa43e6242f5bbf90a646bd2a95">See commit c1799c7efc015daa43e6242f5bbf90a646bd2a95.</a></p>
+
+  </div><a class="u-url" href="/2017/07/01/how-to-write-a-game-boy-emulator-part-4-the-instructions-of-the-bios.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">potardif&#39;s blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">potardif&#39;s blog</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/potardif"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">potardif</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p></p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
